@@ -8,6 +8,7 @@ export interface User {
   email_verified_at?: string | null; // Estos campos pueden venir de tu API
   created_at?: string;
   updated_at?: string;
+  created_users?: User[]
 }
 
 export interface UsersApiResponse {

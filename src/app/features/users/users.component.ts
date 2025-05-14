@@ -51,6 +51,7 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
   errorMessage: WritableSignal<string | null> = signal(null);
   isEditMode: WritableSignal<boolean> = signal(false);
   currentUserId: WritableSignal<string | null> = signal(null);
+  editingUserCreatedList: WritableSignal<User[]> = signal([]);
 
   toastSuccessMessage: WritableSignal<string | null> = signal(null);
   toastErrorMessage: WritableSignal<string | null> = signal(null);
@@ -273,6 +274,7 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
       phone: user.phone,
       image: user.image,
     });
+    this.editingUserCreatedList.set(user.created_users || []);
     if (this.modalInstance) {
       this.modalInstance.show();
     }
