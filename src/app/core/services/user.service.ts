@@ -30,7 +30,7 @@ export class UserService {
       );
   }
 
-  getUserById(id: number): Observable<User> { // Asumiendo que la API devuelve un solo usuario directamente
+  getUserById(id: string): Observable<User> { // Asumiendo que la API devuelve un solo usuario directamente
     return this.http.get<User>(`${this.apiUrl}/${id}`, { headers: this.getAuthHeaders() });
   }
 
@@ -45,7 +45,7 @@ export class UserService {
     return this.http.post<User>(this.apiUrl, requestBody, { headers: this.getAuthHeaders() });
   }
 
-  updateUser(id: number, user: Partial<Omit<User, 'id' | 'email_verified_at' | 'created_at' | 'updated_at'>>): Observable<User> {
+  updateUser(id: string, user: Partial<Omit<User, 'id' | 'email_verified_at' | 'created_at' | 'updated_at'>>): Observable<User> {
      // El cuerpo de la solicitud según tu ejemplo de actualización
      const requestBody = {
       name: user.name,
@@ -58,7 +58,7 @@ export class UserService {
     return this.http.patch<User>(`${this.apiUrl}/${id}`, filteredBody, { headers: this.getAuthHeaders() });
   }
 
-  deleteUser(id: number): Observable<any> { // La API de borrado podría no devolver contenido o un mensaje de éxito
+  deleteUser(id: string): Observable<any> { // La API de borrado podría no devolver contenido o un mensaje de éxito
     return this.http.delete<any>(`${this.apiUrl}/${id}`, { headers: this.getAuthHeaders() });
   }
 }

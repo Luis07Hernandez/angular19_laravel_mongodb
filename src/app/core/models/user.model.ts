@@ -1,5 +1,5 @@
 export interface User {
-  id?: number; // El ID es opcional al crear, pero presente al leer/actualizar/eliminar
+  id?: string; // El ID es opcional al crear, pero presente al leer/actualizar/eliminar
   name: string;
   email: string;
   phone: string;

@@ -1,46 +1,61 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef, inject, signal, WritableSignal, DestroyRef } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, AbstractControl, ReactiveFormsModule } from '@angular/forms';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ViewChild,
+  ElementRef,
+  ChangeDetectorRef,
+  inject,
+  signal,
+  WritableSignal,
+  DestroyRef,
+  NgZone,
+} from '@angular/core';
+import {
+  FormBuilder,
+  FormGroup,
+  Validators,
+  AbstractControl,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop'; // Para la gestión de suscripciones moderna
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
-import { User } from '../../core/models/user.model'; // Asegúrate que la ruta sea correcta
-import { UserService } from '../../core/services/user.service'; // Asegúrate que la ruta sea correcta
+import { User } from '../../core/models/user.model';
+import { UserService } from '../../core/services/user.service';
+import { data } from 'jquery';
 
-// Declaraciones para jQuery y Bootstrap, ya que DataTables y el modal de Bootstrap los requieren
 declare var $: any;
 declare var bootstrap: any;
 
 @Component({
   selector: 'app-users',
   standalone: true,
-  imports: [
-    CommonModule,        // Necesario para ngClass, pipes, etc. (aunque usemos @if/@for)
-    ReactiveFormsModule  // Para Reactive Forms (formGroup, formControlName)
-  ],
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './users.component.html',
-  styleUrls: ['./users.component.scss']
+  styleUrls: ['./users.component.scss'],
 })
 export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
-  // Referencias a elementos del DOM
   @ViewChild('usersTable') usersTable!: ElementRef<HTMLTableElement>;
   @ViewChild('userModal') userModalElem!: ElementRef<HTMLDivElement>;
 
-  // Inyección de dependencias moderna
   private userService = inject(UserService);
   private fb = inject(FormBuilder);
-  private cdr = inject(ChangeDetectorRef); // Aún útil para forzar detección con librerías externas como DataTables
-  private destroyRef = inject(DestroyRef); // Para takeUntilDestroyed
+  private cdr = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
+  private ngZone = inject(NgZone); // <--- INYECTAR NgZone
 
-  // Estado del componente gestionado con Signals
   users: WritableSignal<User[]> = signal([]);
   isLoading: WritableSignal<boolean> = signal(false);
   errorMessage: WritableSignal<string | null> = signal(null);
   isEditMode: WritableSignal<boolean> = signal(false);
-  currentUserId: WritableSignal<number | null> = signal(null);
+  currentUserId: WritableSignal<string | null> = signal(null);
 
-  userForm!: FormGroup; // FormGroup sigue siendo la forma estándar para formularios complejos
-  private modalInstance: any; // Instancia del modal de Bootstrap
-  private dataTable: any;     // Instancia de DataTables
+
+  userForm!: FormGroup;
+  private modalInstance: any;
+  private dataTable: any;
 
   constructor() {
     this.initUserForm();
@@ -51,90 +66,188 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    // Inicializar el modal de Bootstrap después de que la vista se haya inicializado
-    if (this.userModalElem && this.userModalElem.nativeElement) {
-      this.modalInstance = new bootstrap.Modal(this.userModalElem.nativeElement);
+    if (this.userModalElem?.nativeElement) {
+      this.modalInstance = new bootstrap.Modal(
+        this.userModalElem.nativeElement
+      );
     } else {
       console.error('Elemento del modal de usuario no encontrado.');
     }
   }
 
   initUserForm(): void {
-    // Usar NonNullableFormBuilder para tipos más estrictos si todos los campos son requeridos inicialmente
-    // const fb = inject(NonNullableFormBuilder);
     this.userForm = this.fb.group({
       name: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      phone: ['', Validators.required], // Considera validaciones de patrones para teléfonos
-      image: ['', Validators.required]  // Considera validaciones de patrones para URLs
+      phone: ['', Validators.required],
+      image: ['', Validators.required],
     });
   }
 
   loadUsers(): void {
     this.isLoading.set(true);
     this.errorMessage.set(null);
-    this.userService.getUsers()
-      .pipe(takeUntilDestroyed(this.destroyRef)) // Gestión de suscripción moderna
+    this.userService
+      .getUsers()
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (data) => {
           this.users.set(data);
           this.isLoading.set(false);
-          this.cdr.detectChanges(); // Forzar detección de cambios antes de (re)inicializar DataTables
+          this.cdr.detectChanges();
           this.initializeDataTable();
         },
         error: (err) => {
           console.error('Error al cargar usuarios:', err);
-          this.users.set([]); // Limpiar usuarios en caso de error
-          this.errorMessage.set('Error al cargar usuarios. Por favor, intente más tarde.');
+          this.users.set([]);
+          this.errorMessage.set(
+            'Error al cargar usuarios. Por favor, intente más tarde.'
+          );
           this.isLoading.set(false);
-          this.cdr.detectChanges(); // Asegurar que la UI refleje el estado de error y tabla vacía
-          this.initializeDataTable(); // Inicializar DataTables incluso si hay error para mostrar tabla vacía
-        }
+          this.cdr.detectChanges();
+          this.initializeDataTable(); // Para mostrar tabla vacía con mensaje de DataTables
+        },
       });
   }
 
   initializeDataTable(): void {
     if (this.dataTable) {
-      this.dataTable.destroy(); // Destruir instancia previa si existe
+      this.dataTable.destroy();
+      this.dataTable = null; // Asegurar que se reinicialice
     }
 
-    // Usar un pequeño timeout para asegurar que Angular haya renderizado el DOM
-    // basado en los datos actualizados (users signal) antes de que jQuery lo manipule.
-    setTimeout(() => {
-      if (this.usersTable && this.usersTable.nativeElement) {
-        const currentUsers = this.users(); // Obtener el valor del signal
-        if (currentUsers.length > 0) {
-            this.dataTable = $(this.usersTable.nativeElement).DataTable({
-                responsive: true,
-                // language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' } // Para español
+    if (!this.usersTable || !this.usersTable.nativeElement) {
+        // Si la tabla aún no está en el DOM (por ejemplo, si @if (isLoading()) la oculta completamente)
+        // entonces no podemos inicializar DataTables.
+        // Asegúrate que el elemento <table> siempre exista en el DOM cuando esta función es llamada.
+        // El @if actual en tu HTML es: @if (!isLoading()) { ...table... }
+        // Si isLoading es true, la tabla no existe.
+        // Modificaremos loadUsers y el HTML para manejar esto.
+      console.warn('usersTable nativeElement no disponible. Retrasando inicialización de DataTable o revisa el @if.');
+      // Una opción es llamar initializeDataTable solo cuando !isLoading() en el HTML mediante alguna directiva o
+      // asegurar que loadUsers lo llame en el momento adecuado post-carga.
+      // La lógica actual de llamarlo en el next y error de loadUsers es mayormente correcta
+      // siempre que el <table> esté renderizado.
+      if (this.isLoading()) return; // No intentes inicializar si está cargando y la tabla no existe
+    }
+
+
+    const tableNode = this.usersTable.nativeElement;
+
+    this.dataTable = $(tableNode).DataTable({
+      responsive: true,
+      data: this.users(), // Obtener datos del signal
+      columns: [
+        { title: 'Codigo de Usuario', data: 'code' },
+        { title: 'Nombre', data: 'name' },
+        { title: 'Email', data: 'email' },
+        {
+            title: 'Fecha de Creación',
+            data: 'created_at',
+            render: (data: string | null) => {
+                if (!data) return '';
+                try {
+                    // Formatear la fecha. Ajusta según el formato de tu fecha.
+                    return new Date(data).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' });
+                } catch (e) {
+                    return data; // Devolver el dato original si no se puede parsear
+                }
+            }
+        },
+        {
+            title: 'Acciones',
+            data: null, // No se basa en un campo de datos específico
+            orderable: false,
+            searchable: false,
+            render: (data: any, type: any, row: User) => {
+                // Usamos row.id que debería ser el identificador único del usuario
+                return `
+                    <button class="btn btn-sm btn-warning me-2 edit-user-btn" data-user-id="${row.id}" title="Editar">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger delete-user-btn" data-user-id="${row.id}" title="Eliminar">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+            }
+        }
+      ],
+      language: {
+          emptyTable: "No hay usuarios para mostrar.",
+          loadingRecords: "Cargando...",
+          processing: "Procesando...",
+          zeroRecords: "No se encontraron resultados",
+          infoEmpty: "Mostrando 0 de 0 entradas",
+          infoFiltered: "(filtrado de _MAX_ entradas totales)",
+          info: "Mostrando _START_ a _END_ de _TOTAL_ entradas",
+          paginate: {
+            first: "Primero",
+            last: "Último",
+            next: "Siguiente",
+            previous: "Anterior"
+          },
+      },
+      destroy: true, // Importante para reinicializar correctamente
+      // Callback para adjuntar listeners después de cada dibujado de la tabla (paginación, etc.)
+      drawCallback: () => {
+        this.ngZone.run(() => { // Asegurar que estamos en la zona de Angular para los listeners
+          this.attachActionListeners();
+        });
+      }
+    });
+  }
+
+  private attachActionListeners(): void {
+    const tableNode = this.usersTable.nativeElement;
+
+    // Remover listeners previos para evitar duplicados
+    $(tableNode).off('click', '.edit-user-btn').on('click', '.edit-user-btn', (event: JQuery.ClickEvent) => {
+        const userId = $(event.currentTarget).data('user-id');
+        // Convertir a string si es necesario o manejar tipos consistentemente
+        const userToEdit = this.users().find(u => String(u.id) === String(userId));
+        if (userToEdit) {
+            this.ngZone.run(() => { // Correr dentro de la zona de Angular
+                this.openEditUserModal(userToEdit);
             });
         } else {
-            // Si no hay datos, inicializar con configuración para tabla vacía si es necesario
-            // o simplemente no inicializar si el HTML ya maneja el mensaje de "no hay datos".
-            // Por consistencia, si la tabla existe en el DOM, DataTables puede inicializarse.
-            this.dataTable = $(this.usersTable.nativeElement).DataTable({
-                responsive: true,
-                data: [], // DataTables puede manejar un array vacío
-                columns: [ // Definir columnas para que la tabla se renderice correctamente vacía
-                    { title: "ID" }, // Cambiado de CODE a ID
-                    { title: "Imagen" },
-                    { title: "Nombre" },
-                    { title: "Email" },
-                    { title: "Teléfono" },
-                    { title: "Acciones" }
-                ],
-                // language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' }
-            });
+            console.warn('Usuario no encontrado para editar:', userId);
         }
-      }
-    }, 0);
+    });
+
+    $(tableNode).off('click', '.delete-user-btn').on('click', '.delete-user-btn', (event: JQuery.ClickEvent) => {
+        const userId = $(event.currentTarget).data('user-id');
+
+        // El método onDeleteUser espera string | undefined
+        const idToDelete = typeof userId === 'string' ? userId : String(userId);
+
+        if (idToDelete !== undefined && idToDelete !== null) {
+            this.ngZone.run(() => { // Correr dentro de la zona de Angular
+                // Si onDeleteUser espera un número y tu ID es string, necesitarás convertirlo o ajustar el tipo
+                this.onDeleteUser(idToDelete); // Ajusta el 'as any' si es necesario
+            });
+        } else {
+            console.warn('ID de usuario no válido para eliminar:', userId);
+        }
+    });
   }
+
+  // Helper para escapar HTML en atributos si es necesario (ej. en alt de imagen)
+  private escapeHtml(unsafe: string): string {
+    if (!unsafe) return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+  }
+
 
   openAddUserModal(): void {
     this.isEditMode.set(false);
     this.currentUserId.set(null);
     this.userForm.reset();
-    this.errorMessage.set(null); // Limpiar errores del modal
+    this.errorMessage.set(null);
     if (this.modalInstance) {
       this.modalInstance.show();
     }
@@ -142,8 +255,8 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openEditUserModal(user: User): void {
     if (!user || user.id === undefined) {
-      console.error('Intento de editar usuario sin ID:', user);
-      this.errorMessage.set('No se puede editar el usuario: falta ID.');
+      console.error('Intento de editar usuario sin ID o usuario nulo:', user);
+      this.errorMessage.set('No se puede editar el usuario: falta ID o datos.');
       return;
     }
     this.isEditMode.set(true);
@@ -153,7 +266,7 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      image: user.image
+      image: user.image,
     });
     if (this.modalInstance) {
       this.modalInstance.show();
@@ -162,17 +275,19 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSubmitUserForm(): void {
     if (this.userForm.invalid) {
-      this.userForm.markAllAsTouched(); // Mostrar errores de validación
+      this.userForm.markAllAsTouched();
       return;
     }
 
     this.isLoading.set(true);
     this.errorMessage.set(null);
-    const formData = this.userForm.getRawValue(); // Usar getRawValue para obtener todos los valores
+    const formData = this.userForm.getRawValue();
+    const currentId = this.currentUserId();
 
-    const operation$ = this.isEditMode() && this.currentUserId() !== null
-      ? this.userService.updateUser(this.currentUserId()!, formData) // El '!' es seguro por la condición
-      : this.userService.createUser(formData); // Asumiendo que createUser espera el mismo formato
+    const operation$ =
+      this.isEditMode() && currentId !== null
+        ? this.userService.updateUser(currentId, formData)
+        : this.userService.createUser(formData);
 
     operation$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
@@ -180,78 +295,86 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
         const successMessage = this.isEditMode()
           ? 'Usuario actualizado correctamente.'
           : 'Usuario creado correctamente.';
-        this.showSuccessNotification(successMessage); // Usar un método de notificación
-        this.loadUsers(); // <--- REFRESH AUTOMÁTICO DE DATOS
+        this.showSuccessNotification(successMessage);
+        this.loadUsers(); // Refresca los datos y reinicializa DataTable
         if (this.modalInstance) this.modalInstance.hide();
       },
       error: (err) => {
-        console.error(`Error al ${this.isEditMode() ? 'actualizar' : 'crear'} usuario:`, err);
-        // Formatear mensaje de error de la API si está disponible
-        const apiError = err.error?.message || (err.error?.errors ? JSON.stringify(err.error.errors) : err.message);
+        console.error(
+          `Error al ${this.isEditMode() ? 'actualizar' : 'crear'} usuario:`,
+          err
+        );
+        const apiError =
+          err.error?.message ||
+          (err.error?.errors ? JSON.stringify(err.error.errors) : err.message);
         this.errorMessage.set(`Error: ${apiError || 'Ocurrió un problema.'}`);
         this.isLoading.set(false);
-      }
+      },
     });
   }
 
-  onDeleteUser(userId: number | undefined): void {
+  // Ajusta el tipo de userId si tus IDs son strings (ej. MongoDB _id)
+  onDeleteUser(userId: number | string | undefined): void {
     if (userId === undefined) {
       console.error('Intento de eliminar usuario sin ID.');
       this.showErrorNotification('No se puede eliminar el usuario: falta ID.');
       return;
     }
 
-    // Considerar un servicio de confirmación más elegante (ej. SweetAlert2)
     if (confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
       this.isLoading.set(true);
-      this.errorMessage.set(null); // Limpiar error general antes de la operación
-      this.userService.deleteUser(userId)
+      this.errorMessage.set(null);
+      // Si userService.deleteUser espera un número, y tu ID es string, convierte
+      // const idToDelete = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+      // if (isNaN(idToDelete as number)) { ... error ... }
+      this.userService
+        .deleteUser(userId as any) // Ajusta 'as any' o convierte el tipo según tu servicio
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: () => {
             this.isLoading.set(false);
             this.showSuccessNotification('Usuario eliminado correctamente.');
-            this.loadUsers(); // <--- REFRESH AUTOMÁTICO DE DATOS
+            this.loadUsers(); // Refresca los datos y reinicializa DataTable
           },
           error: (err) => {
             console.error('Error al eliminar usuario:', err);
             const apiError = err.error?.message || err.message;
-            this.showErrorNotification(`Error al eliminar usuario: ${apiError || 'Ocurrió un problema.'}`);
+            this.showErrorNotification(
+              `Error al eliminar usuario: ${apiError || 'Ocurrió un problema.'}`
+            );
             this.isLoading.set(false);
-          }
+          },
         });
     }
   }
 
-  // Métodos de notificación (podrían ser reemplazados por un servicio de Toast/Snackbar)
   private showSuccessNotification(message: string): void {
-    alert(message); // Placeholder, reemplazar con un sistema de notificaciones real
+    alert(message);
     console.log('Success:', message);
   }
 
   private showErrorNotification(message: string): void {
-    // El errorMessage signal se usa para errores dentro del modal o errores generales de carga.
-    // Este método es para notificaciones de error más directas tras una acción.
-    alert(message); // Placeholder
+    alert(message);
     console.error('Error Notification:', message);
   }
 
-  // Getter para acceder fácilmente a los controles del formulario en la plantilla (si aún se usa con ngClass)
   get f(): { [key: string]: AbstractControl } {
     return this.userForm.controls;
   }
 
   ngOnDestroy(): void {
-    // takeUntilDestroyed maneja la desuscripción automáticamente.
-    // Limpieza manual de recursos no gestionados por Angular:
     if (this.dataTable) {
       this.dataTable.destroy();
+      this.dataTable = null;
     }
-    if (this.modalInstance) {
-      // Bootstrap 5 modals se supone que se limpian solos, pero por si acaso:
-      this.modalInstance.hide(); // Asegurarse de que esté oculto
-      // Bootstrap 5 no tiene un método 'dispose' como BS4 para removerlo completamente del DOM programáticamente de forma sencilla.
-      // La remoción del backdrop se maneja usualmente por Bootstrap.
+    // El modal de Bootstrap debería manejarse solo, pero si tienes una instancia, puedes ocultarla
+    if (this.modalInstance && typeof this.modalInstance.hide === 'function') {
+        try {
+            this.modalInstance.hide();
+        } catch (e) {
+            console.warn("Error al ocultar modal en ngOnDestroy:", e);
+        }
     }
+    // takeUntilDestroyed maneja la desuscripción de observables de RxJS
   }
 }
