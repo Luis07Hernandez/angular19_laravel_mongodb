@@ -6,14 +6,32 @@
     </button>
   </div>
 
-  <div class="py-5">
-    <!-- Zona de mensajes -->
-    <div class="alert alert-success d-none" role="alert">
-      A simple success alert—check it out!
+  <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    @if (toastSuccessMessage()) {
+    <div class="toast align-items-center text-white bg-success border-0 show" role="alert" aria-live="assertive"
+      aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body">
+          <i class="bi bi-check-circle-fill me-2"></i> {{ toastSuccessMessage() }}
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" (click)="toastSuccessMessage.set(null)"
+          aria-label="Close"></button>
+      </div>
     </div>
-    <div class="alert alert-danger d-none" role="alert">
-      A simple danger alert—check it out!
+    }
+
+    @if (toastErrorMessage()) {
+    <div class="toast align-items-center text-white bg-danger border-0 show" role="alert" aria-live="assertive"
+      aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ toastErrorMessage() }}
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" (click)="toastErrorMessage.set(null)"
+          aria-label="Close"></button>
+      </div>
     </div>
+    }
   </div>
 
   @if (isLoading() && users().length === 0) {

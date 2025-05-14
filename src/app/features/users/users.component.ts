@@ -52,6 +52,11 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
   isEditMode: WritableSignal<boolean> = signal(false);
   currentUserId: WritableSignal<string | null> = signal(null);
 
+  toastSuccessMessage: WritableSignal<string | null> = signal(null);
+  toastErrorMessage: WritableSignal<string | null> = signal(null);
+
+  private successToastTimeoutId: any = null;
+  private errorToastTimeoutId: any = null;
 
   userForm!: FormGroup;
   private modalInstance: any;
@@ -348,14 +353,50 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private showSuccessNotification(message: string): void {
-    alert(message);
-    console.log('Success:', message);
+private showSuccessNotification(message: string): void {
+    // Limpiar cualquier mensaje de error y su timeout
+    if (this.errorToastTimeoutId) {
+      clearTimeout(this.errorToastTimeoutId);
+      this.errorToastTimeoutId = null;
+    }
+    this.toastErrorMessage.set(null);
+
+    // Establecer el mensaje de éxito
+    this.toastSuccessMessage.set(message);
+
+    // Limpiar timeout de éxito previo si existe
+    if (this.successToastTimeoutId) {
+      clearTimeout(this.successToastTimeoutId);
+    }
+
+    // Configurar nuevo timeout para ocultar el mensaje de éxito
+    this.successToastTimeoutId = setTimeout(() => {
+      this.toastSuccessMessage.set(null);
+      this.successToastTimeoutId = null;
+    }, 5000); // Ocultar después de 5 segundos (ajusta según necesites)
   }
 
   private showErrorNotification(message: string): void {
-    alert(message);
-    console.error('Error Notification:', message);
+    // Limpiar cualquier mensaje de éxito y su timeout
+    if (this.successToastTimeoutId) {
+      clearTimeout(this.successToastTimeoutId);
+      this.successToastTimeoutId = null;
+    }
+    this.toastSuccessMessage.set(null);
+
+    // Establecer el mensaje de error
+    this.toastErrorMessage.set(message);
+
+    // Limpiar timeout de error previo si existe
+    if (this.errorToastTimeoutId) {
+      clearTimeout(this.errorToastTimeoutId);
+    }
+
+    // Configurar nuevo timeout para ocultar el mensaje de error
+    this.errorToastTimeoutId = setTimeout(() => {
+      this.toastErrorMessage.set(null);
+      this.errorToastTimeoutId = null;
+    }, 7000); // Ocultar después de 7 segundos (errores pueden requerir más tiempo)
   }
 
   get f(): { [key: string]: AbstractControl } {
@@ -363,11 +404,19 @@ export class UsersComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+
+    if (this.successToastTimeoutId) {
+      clearTimeout(this.successToastTimeoutId);
+    }
+    if (this.errorToastTimeoutId) {
+      clearTimeout(this.errorToastTimeoutId);
+    }
+
     if (this.dataTable) {
       this.dataTable.destroy();
       this.dataTable = null;
     }
-    // El modal de Bootstrap debería manejarse solo, pero si tienes una instancia, puedes ocultarla
+
     if (this.modalInstance && typeof this.modalInstance.hide === 'function') {
         try {
             this.modalInstance.hide();
